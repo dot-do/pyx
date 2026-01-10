@@ -1,9 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
   VirtualEnv,
-  InstalledPackage,
   VirtualEnvOptions,
-  VirtualEnvState,
 } from '../../../core/venv'
 
 describe('VirtualEnv', () => {
@@ -424,6 +422,8 @@ describe('Export/import environment state', () => {
 
     it('should include all installed packages', () => {
       const state = env.export()
+      expect(typeof state).not.toBe('string')
+      if (typeof state === 'string') throw new Error('Expected VirtualEnvState')
       expect(state.packages).toHaveLength(2)
       expect(state.packages).toContainEqual(
         expect.objectContaining({ name: 'requests', version: '2.28.0' })
@@ -490,6 +490,7 @@ numpy>=1.24.0
   describe('VirtualEnv.fromState', () => {
     it('should create new environment from state', async () => {
       const state = env.export()
+      if (typeof state === 'string') throw new Error('Expected VirtualEnvState')
       const newEnv = await VirtualEnv.fromState(state)
 
       expect(newEnv).toBeInstanceOf(VirtualEnv)

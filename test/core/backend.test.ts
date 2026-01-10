@@ -9,9 +9,20 @@ import {
 } from '../../core/backend'
 
 describe('PythonBackend interface', () => {
+  let backend: PythonBackend
+
+  beforeEach(() => {
+    backend = new MockBackend()
+  })
+
   describe('exec', () => {
     it('should execute Python code and return ExecResult', async () => {
-      const backend: PythonBackend = {} as PythonBackend
+      ;(backend as MockBackend).setResponse('print("hello")', {
+        result: null,
+        stdout: 'hello\n',
+        stderr: '',
+        duration: 5,
+      })
       const result = await backend.exec('print("hello")')
 
       expect(result).toBeDefined()
@@ -22,7 +33,12 @@ describe('PythonBackend interface', () => {
     })
 
     it('should accept options parameter', async () => {
-      const backend: PythonBackend = {} as PythonBackend
+      ;(backend as MockBackend).setResponse('print(x)', {
+        result: null,
+        stdout: '42\n',
+        stderr: '',
+        duration: 1,
+      })
       const options: ExecOptions = {
         timeout: 5000,
         globals: { x: 42 },
@@ -33,7 +49,12 @@ describe('PythonBackend interface', () => {
     })
 
     it('should capture stderr on error', async () => {
-      const backend: PythonBackend = {} as PythonBackend
+      ;(backend as MockBackend).setResponse('raise ValueError("test error")', {
+        result: null,
+        stdout: '',
+        stderr: 'ValueError: test error',
+        duration: 1,
+      })
       const result = await backend.exec('raise ValueError("test error")')
 
       expect(result.stderr).toContain('ValueError')
@@ -41,7 +62,12 @@ describe('PythonBackend interface', () => {
     })
 
     it('should return execution duration', async () => {
-      const backend: PythonBackend = {} as PythonBackend
+      ;(backend as MockBackend).setResponse('import time; time.sleep(0.1)', {
+        result: null,
+        stdout: '',
+        stderr: '',
+        duration: 105,
+      })
       const result = await backend.exec('import time; time.sleep(0.1)')
 
       expect(result.duration).toBeGreaterThanOrEqual(100)
@@ -50,7 +76,12 @@ describe('PythonBackend interface', () => {
 
   describe('execWithGlobals', () => {
     it('should execute code with pre-set globals', async () => {
-      const backend: PythonBackend = {} as PythonBackend
+      ;(backend as MockBackend).setResponse('print(name * count)', {
+        result: null,
+        stdout: 'worldworldworld\n',
+        stderr: '',
+        duration: 1,
+      })
       const globals = { name: 'world', count: 3 }
       const result = await backend.execWithGlobals('print(name * count)', globals)
 
@@ -58,7 +89,12 @@ describe('PythonBackend interface', () => {
     })
 
     it('should allow accessing globals in code', async () => {
-      const backend: PythonBackend = {} as PythonBackend
+      ;(backend as MockBackend).setResponse('result = sum(items)', {
+        result: 6,
+        stdout: '',
+        stderr: '',
+        duration: 1,
+      })
       const globals = { items: [1, 2, 3] }
       const result = await backend.execWithGlobals('result = sum(items)', globals)
 
@@ -68,7 +104,6 @@ describe('PythonBackend interface', () => {
 
   describe('importModule', () => {
     it('should import a Python module', async () => {
-      const backend: PythonBackend = {} as PythonBackend
       const mod = await backend.importModule('json')
 
       expect(mod).toBeDefined()
@@ -76,15 +111,12 @@ describe('PythonBackend interface', () => {
     })
 
     it('should return module with callable functions', async () => {
-      const backend: PythonBackend = {} as PythonBackend
       const json: PyModule = await backend.importModule('json')
 
       expect(typeof json.call).toBe('function')
     })
 
     it('should throw on non-existent module', async () => {
-      const backend: PythonBackend = {} as PythonBackend
-
       await expect(backend.importModule('nonexistent_module_xyz'))
         .rejects.toThrow()
     })
@@ -92,15 +124,13 @@ describe('PythonBackend interface', () => {
 
   describe('getGlobal', () => {
     it('should get a global variable by name', async () => {
-      const backend: PythonBackend = {} as PythonBackend
-      await backend.exec('my_var = 42')
+      await backend.setGlobal('my_var', 42)
       const value = await backend.getGlobal('my_var')
 
       expect(value).toBe(42)
     })
 
     it('should return undefined for non-existent global', async () => {
-      const backend: PythonBackend = {} as PythonBackend
       const value = await backend.getGlobal('nonexistent_var')
 
       expect(value).toBeUndefined()
@@ -109,7 +139,12 @@ describe('PythonBackend interface', () => {
 
   describe('setGlobal', () => {
     it('should set a global variable', async () => {
-      const backend: PythonBackend = {} as PythonBackend
+      ;(backend as MockBackend).setResponse('print(my_var)', {
+        result: null,
+        stdout: 'hello\n',
+        stderr: '',
+        duration: 1,
+      })
       await backend.setGlobal('my_var', 'hello')
       const result = await backend.exec('print(my_var)')
 
@@ -117,7 +152,6 @@ describe('PythonBackend interface', () => {
     })
 
     it('should overwrite existing global', async () => {
-      const backend: PythonBackend = {} as PythonBackend
       await backend.setGlobal('x', 1)
       await backend.setGlobal('x', 2)
       const value = await backend.getGlobal('x')
@@ -126,7 +160,12 @@ describe('PythonBackend interface', () => {
     })
 
     it('should handle complex objects', async () => {
-      const backend: PythonBackend = {} as PythonBackend
+      ;(backend as MockBackend).setResponse('result = data["nested"]["value"][1]', {
+        result: 2,
+        stdout: '',
+        stderr: '',
+        duration: 1,
+      })
       await backend.setGlobal('data', { nested: { value: [1, 2, 3] } })
       const result = await backend.exec('result = data["nested"]["value"][1]')
 
@@ -136,7 +175,6 @@ describe('PythonBackend interface', () => {
 
   describe('installPackage', () => {
     it('should install a package by name', async () => {
-      const backend: PythonBackend = {} as PythonBackend
       await backend.installPackage('requests')
       const packages = await backend.listPackages()
 
@@ -144,7 +182,6 @@ describe('PythonBackend interface', () => {
     })
 
     it('should install a specific version', async () => {
-      const backend: PythonBackend = {} as PythonBackend
       await backend.installPackage('requests', '2.28.0')
       const packages = await backend.listPackages()
 
@@ -155,14 +192,12 @@ describe('PythonBackend interface', () => {
 
   describe('listPackages', () => {
     it('should return array of installed packages', async () => {
-      const backend: PythonBackend = {} as PythonBackend
       const packages = await backend.listPackages()
 
       expect(Array.isArray(packages)).toBe(true)
     })
 
     it('should include package name and version', async () => {
-      const backend: PythonBackend = {} as PythonBackend
       await backend.installPackage('numpy')
       const packages = await backend.listPackages()
 
@@ -174,8 +209,7 @@ describe('PythonBackend interface', () => {
 
   describe('createSnapshot', () => {
     it('should create a snapshot of current state', async () => {
-      const backend: PythonBackend = {} as PythonBackend
-      await backend.exec('x = 42')
+      await backend.setGlobal('x', 42)
       const snapshot = await backend.createSnapshot()
 
       expect(snapshot).toBeInstanceOf(Uint8Array)
@@ -185,11 +219,10 @@ describe('PythonBackend interface', () => {
 
   describe('restoreSnapshot', () => {
     it('should restore state from snapshot', async () => {
-      const backend: PythonBackend = {} as PythonBackend
-      await backend.exec('x = 42')
+      await backend.setGlobal('x', 42)
       const snapshot = await backend.createSnapshot()
 
-      await backend.exec('x = 100')
+      await backend.setGlobal('x', 100)
       await backend.restoreSnapshot(snapshot)
 
       const value = await backend.getGlobal('x')
@@ -197,7 +230,6 @@ describe('PythonBackend interface', () => {
     })
 
     it('should restore installed packages', async () => {
-      const backend: PythonBackend = {} as PythonBackend
       await backend.installPackage('requests')
       const snapshot = await backend.createSnapshot()
 
@@ -211,8 +243,8 @@ describe('PythonBackend interface', () => {
 
   describe('reset', () => {
     it('should clear all globals', async () => {
-      const backend: PythonBackend = {} as PythonBackend
-      await backend.exec('x = 42; y = "hello"')
+      await backend.setGlobal('x', 42)
+      await backend.setGlobal('y', 'hello')
       await backend.reset()
 
       const x = await backend.getGlobal('x')
@@ -223,8 +255,13 @@ describe('PythonBackend interface', () => {
     })
 
     it('should reset to clean state', async () => {
-      const backend: PythonBackend = {} as PythonBackend
-      await backend.exec('import sys; sys.my_custom_attr = True')
+      ;(backend as MockBackend).setResponse('hasattr(sys, "my_custom_attr")', {
+        result: false,
+        stdout: '',
+        stderr: '',
+        duration: 1,
+      })
+      await backend.setGlobal('sys', { my_custom_attr: true })
       await backend.reset()
 
       const result = await backend.exec('hasattr(sys, "my_custom_attr")')

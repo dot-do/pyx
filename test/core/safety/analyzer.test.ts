@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { analyze, SafetyReport } from '../../../core/safety'
+import { analyze } from '../../../core/safety'
 
 describe('Python Safety Analyzer', () => {
   describe('dangerous imports', () => {

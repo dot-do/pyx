@@ -1,6 +1,17 @@
 # Agent Instructions
 
+**pyx** - Python execution for Cloudflare Workers via Pyodide WebAssembly.
+
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
+
+## Project Quality Gates
+
+Before completing any work:
+
+```bash
+npm run typecheck    # TypeScript must pass
+npm run test:run     # All tests must pass
+```
 
 ## Quick Reference
 
@@ -38,3 +49,9 @@ bd sync               # Sync with git
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 
+## Key Codebase Conventions
+
+- **core/** has zero Cloudflare dependencies - keep it runtime-agnostic
+- All public functions should have JSDoc comments
+- Use explicit type exports (not `export *`) for clarity
+- Tests live in `test/` mirroring the `core/` structure

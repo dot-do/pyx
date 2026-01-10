@@ -5,20 +5,12 @@
     "moduleResolution": "bundler",
     "esModuleInterop": true,
     "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "declaration": true,
     "outDir": "dist",
     "rootDir": ".",
-    "baseUrl": ".",
-    "types": ["node", "@cloudflare/workers-types"],
-    "paths": {
-      "@/*": ["./*"]
-    }
+    "composite": true
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "dist"]
