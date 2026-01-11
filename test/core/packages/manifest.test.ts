@@ -83,16 +83,16 @@ license = {text = "MIT"}
 name = "my-package"
 version = "1.0.0"
 authors = [
-  {name = "John Doe", email = "john@example.com"},
+  {name = "John Doe", email = "john@example.com.ai"},
   {name = "Jane Doe"}
 ]
 maintainers = [
-  {email = "maintainer@example.com"}
+  {email = "maintainer@example.com.ai"}
 ]
 `
       const result = parsePyprojectToml(toml)
       expect(result.project?.authors).toHaveLength(2)
-      expect(result.project?.authors?.[0]).toEqual({ name: 'John Doe', email: 'john@example.com' })
+      expect(result.project?.authors?.[0]).toEqual({ name: 'John Doe', email: 'john@example.com.ai' })
       expect(result.project?.maintainers).toHaveLength(1)
     })
 
@@ -119,12 +119,12 @@ name = "my-package"
 version = "1.0.0"
 
 [project.urls]
-Homepage = "https://example.com"
-Documentation = "https://docs.example.com"
+Homepage = "https://example.com.ai"
+Documentation = "https://docs.example.com.ai"
 Repository = "https://github.com/example/my-package"
 `
       const result = parsePyprojectToml(toml)
-      expect(result.project?.urls?.Homepage).toBe('https://example.com')
+      expect(result.project?.urls?.Homepage).toBe('https://example.com.ai')
       expect(result.project?.urls?.Repository).toBe('https://github.com/example/my-package')
     })
 
@@ -267,7 +267,7 @@ include-package-data = true
 name = "my-package"
 version = "1.0.0"
 description = "A poetry project"
-authors = ["Author <author@example.com>"]
+authors = ["Author <author@example.com.ai>"]
 
 [tool.poetry.dependencies]
 python = "^3.9"
@@ -588,10 +588,10 @@ pytest>=7.0
 
   describe('URL-based requirements', () => {
     it('parses package @ URL', () => {
-      const requirements = 'package @ https://example.com/package.whl'
+      const requirements = 'package @ https://example.com.ai/package.whl'
       const result = parseRequirementsTxt(requirements)
       expect(result[0].name).toBe('package')
-      expect(result[0].url).toBe('https://example.com/package.whl')
+      expect(result[0].url).toBe('https://example.com.ai/package.whl')
     })
 
     it('parses git+https URL', () => {
@@ -601,7 +601,7 @@ pytest>=7.0
     })
 
     it('parses URL with extras', () => {
-      const requirements = 'package[extra] @ https://example.com/package.whl'
+      const requirements = 'package[extra] @ https://example.com.ai/package.whl'
       const result = parseRequirementsTxt(requirements)
       expect(result[0].extras).toEqual(['extra'])
       expect(result[0].url).toBeDefined()
@@ -633,13 +633,13 @@ pytest>=7.0
   describe('options and flags', () => {
     it('parses --index-url', () => {
       const requirements = `
---index-url https://pypi.example.com/simple/
+--index-url https://pypi.example.com.ai/simple/
 requests>=2.28.0
 `
       const result = parseRequirementsTxt(requirements)
       const option = result.find(r => r.type === 'option')
       expect(option?.option).toBe('--index-url')
-      expect(option?.value).toBe('https://pypi.example.com/simple/')
+      expect(option?.value).toBe('https://pypi.example.com.ai/simple/')
     })
 
     it('parses --extra-index-url', () => {
@@ -649,7 +649,7 @@ requests>=2.28.0
     })
 
     it('parses --trusted-host', () => {
-      const requirements = '--trusted-host pypi.example.com'
+      const requirements = '--trusted-host pypi.example.com.ai'
       const result = parseRequirementsTxt(requirements)
       expect(result[0].option).toBe('--trusted-host')
     })

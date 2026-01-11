@@ -563,7 +563,7 @@ describe('Wheel compatibility', () => {
     await expect(
       env.install('numpy', '1.24.0', {
         wheelUrl:
-          'https://example.com/numpy-1.24.0-cp311-cp311-manylinux_2_17_x86_64.whl',
+          'https://example.com.ai/numpy-1.24.0-cp311-cp311-manylinux_2_17_x86_64.whl',
       })
     ).rejects.toThrow('Wheel is not compatible with Pyodide')
   })
