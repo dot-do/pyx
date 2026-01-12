@@ -1,7 +1,7 @@
 # Wrangler configuration for pyx.do
 # Python execution on Cloudflare Workers
 
-name = "pyx"
+name = "pyx-do"
 main = "do/index.ts"
 compatibility_date = "2024-12-01"
 
@@ -23,6 +23,20 @@ bindings = [
 [[migrations]]
 tag = "v1"
 new_classes = ["PythonModule"]
+
+# ============================================================================
+# Service Bindings
+# ============================================================================
+
+[[services]]
+binding = "FSX"
+service = "fsx-do"
+environment = "production"
+
+[[services]]
+binding = "NPMX"
+service = "npmx-do"
+environment = "production"
 
 # ============================================================================
 # KV Namespaces (for caching)

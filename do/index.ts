@@ -77,6 +77,13 @@ interface R2Object {
 // =============================================================================
 
 /**
+ * Service binding interface for worker-to-worker communication
+ */
+interface ServiceBinding {
+  fetch(request: Request): Promise<Response>
+}
+
+/**
  * Environment bindings for the worker
  */
 export interface Env {
@@ -94,6 +101,12 @@ export interface Env {
 
   /** API key for authentication (optional) */
   API_KEY?: string
+
+  /** FSX service binding for filesystem operations (script storage) */
+  FSX?: ServiceBinding
+
+  /** NPMX service binding for package installation */
+  NPMX?: ServiceBinding
 }
 
 /**
@@ -612,10 +625,13 @@ export class PythonModule {
     /**
      * Install package
      * POST /packages
+     *
+     * If NPMX service is available, uses it for package resolution and caching.
+     * Falls back to direct micropip installation via backend.
      */
     app.post('/packages', async (c: Context) => {
       try {
-        const body = await c.req.json<{ name: string; version?: string }>()
+        const body = await c.req.json<{ name: string; version?: string; useNpmx?: boolean }>()
 
         if (!body.name) {
           return c.json(
@@ -624,6 +640,22 @@ export class PythonModule {
           )
         }
 
+        // Try NPMX first if available and requested (or by default when available)
+        const useNpmx = body.useNpmx !== false && this.env.NPMX !== undefined
+
+        if (useNpmx) {
+          try {
+            await this.installPackageViaNpmx(body.name, body.version)
+            return c.json({
+              success: true,
+              data: { installed: true, source: 'npmx' },
+            } satisfies ApiResponse<{ installed: boolean; source: string }>)
+          } catch {
+            // Fall through to backend installation
+          }
+        }
+
+        // Fall back to direct backend installation
         if (!this.backend) {
           return c.json(
             { success: false, error: 'Backend not initialized' } satisfies ApiResponse<never>,
@@ -635,8 +667,30 @@ export class PythonModule {
 
         return c.json({
           success: true,
-          data: { installed: true },
-        } satisfies ApiResponse<{ installed: boolean }>)
+          data: { installed: true, source: 'micropip' },
+        } satisfies ApiResponse<{ installed: boolean; source: string }>)
+      } catch (err) {
+        const error = err as Error
+        return c.json(
+          { success: false, error: error.message } satisfies ApiResponse<never>,
+          500
+        )
+      }
+    })
+
+    /**
+     * Get package info from NPMX
+     * GET /packages/:name/info
+     */
+    app.get('/packages/:name/info', async (c: Context) => {
+      try {
+        const name = c.req.param('name')
+        const info = await this.getPackageInfo(name)
+
+        return c.json({
+          success: true,
+          data: info,
+        } satisfies ApiResponse<Record<string, unknown>>)
       } catch (err) {
         const error = err as Error
         return c.json(
@@ -670,6 +724,145 @@ export class PythonModule {
         return c.json(
           { success: false, error: error.message } satisfies ApiResponse<never>,
           500
+        )
+      }
+    })
+
+    // ==========================
+    // Script Endpoints (FSX Integration)
+    // ==========================
+
+    /**
+     * Save a Python script
+     * PUT /scripts/:name
+     */
+    app.put('/scripts/:name', async (c: Context) => {
+      try {
+        const name = c.req.param('name')
+        const content = await c.req.text()
+
+        if (!content) {
+          return c.json(
+            { success: false, error: 'Missing script content' } satisfies ApiResponse<never>,
+            400
+          )
+        }
+
+        const result = await this.saveScript(name, content)
+
+        return c.json({
+          success: true,
+          data: result,
+        } satisfies ApiResponse<{ path: string }>)
+      } catch (err) {
+        const error = err as Error
+        return c.json(
+          { success: false, error: error.message } satisfies ApiResponse<never>,
+          500
+        )
+      }
+    })
+
+    /**
+     * Get a Python script
+     * GET /scripts/:name
+     */
+    app.get('/scripts/:name', async (c: Context) => {
+      try {
+        const name = c.req.param('name')
+        const content = await this.loadScript(name)
+
+        return c.json({
+          success: true,
+          data: { name, content },
+        } satisfies ApiResponse<{ name: string; content: string }>)
+      } catch (err) {
+        const error = err as Error
+        const status = error.message.includes('not found') ? 404 : 500
+        return c.json(
+          { success: false, error: error.message } satisfies ApiResponse<never>,
+          status
+        )
+      }
+    })
+
+    /**
+     * List all saved scripts
+     * GET /scripts
+     */
+    app.get('/scripts', async (c: Context) => {
+      try {
+        const scripts = await this.listScripts()
+
+        return c.json({
+          success: true,
+          data: scripts,
+        } satisfies ApiResponse<string[]>)
+      } catch (err) {
+        const error = err as Error
+        return c.json(
+          { success: false, error: error.message } satisfies ApiResponse<never>,
+          500
+        )
+      }
+    })
+
+    /**
+     * Delete a Python script
+     * DELETE /scripts/:name
+     */
+    app.delete('/scripts/:name', async (c: Context) => {
+      try {
+        const name = c.req.param('name')
+        await this.deleteScript(name)
+
+        return c.json({
+          success: true,
+          data: { deleted: true },
+        } satisfies ApiResponse<{ deleted: boolean }>)
+      } catch (err) {
+        const error = err as Error
+        return c.json(
+          { success: false, error: error.message } satisfies ApiResponse<never>,
+          500
+        )
+      }
+    })
+
+    /**
+     * Execute a saved script
+     * POST /scripts/:name/exec
+     */
+    app.post('/scripts/:name/exec', async (c: Context) => {
+      try {
+        const name = c.req.param('name')
+        const body = await c.req.json<{ globals?: Record<string, unknown> }>().catch(
+          (): { globals?: Record<string, unknown> } => ({})
+        )
+
+        // Load script from FSX
+        const code = await this.loadScript(name)
+
+        if (!this.backend) {
+          return c.json(
+            { success: false, error: 'Backend not initialized' } satisfies ApiResponse<never>,
+            500
+          )
+        }
+
+        // Execute the script
+        const result = await this.backend.exec(code, { globals: body.globals })
+
+        return c.json({
+          success: true,
+          data: result,
+        } satisfies ApiResponse<ExecResult>)
+      } catch (err) {
+        const error = err as Error
+        const status = error.message.includes('not found') ? 404 : 500
+        return c.json(
+          { success: false, error: error.message } satisfies ApiResponse<never>,
+          status
         )
       }
     })
@@ -717,6 +910,161 @@ export class PythonModule {
         await this.storage.put(key, session)
       }
     }
+  }
+
+  // ===========================================================================
+  // FSX Integration (Script Storage)
+  // ===========================================================================
+
+  /**
+   * Save a Python script to FSX storage
+   */
+  async saveScript(name: string, content: string): Promise<{ path: string }> {
+    if (!this.env.FSX) {
+      throw new Error('FSX service binding not configured')
+    }
+
+    const path = `/scripts/${name}.py`
+    const response = await this.env.FSX.fetch(
+      new Request(`https://fsx.internal${path}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'text/x-python' },
+        body: content,
+      })
+    )
+
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(`Failed to save script: ${error}`)
+    }
+
+    return { path }
+  }
+
+  /**
+   * Load a Python script from FSX storage
+   */
+  async loadScript(name: string): Promise<string> {
+    if (!this.env.FSX) {
+      throw new Error('FSX service binding not configured')
+    }
+
+    const path = `/scripts/${name}.py`
+    const response = await this.env.FSX.fetch(
+      new Request(`https://fsx.internal${path}`, {
+        method: 'GET',
+      })
+    )
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(`Script not found: ${name}`)
+      }
+      const error = await response.text()
+      throw new Error(`Failed to load script: ${error}`)
+    }
+
+    return response.text()
+  }
+
+  /**
+   * Delete a Python script from FSX storage
+   */
+  async deleteScript(name: string): Promise<void> {
+    if (!this.env.FSX) {
+      throw new Error('FSX service binding not configured')
+    }
+
+    const path = `/scripts/${name}.py`
+    const response = await this.env.FSX.fetch(
+      new Request(`https://fsx.internal${path}`, {
+        method: 'DELETE',
+      })
+    )
+
+    if (!response.ok && response.status !== 404) {
+      const error = await response.text()
+      throw new Error(`Failed to delete script: ${error}`)
+    }
+  }
+
+  /**
+   * List all saved Python scripts
+   */
+  async listScripts(): Promise<string[]> {
+    if (!this.env.FSX) {
+      throw new Error('FSX service binding not configured')
+    }
+
+    const response = await this.env.FSX.fetch(
+      new Request('https://fsx.internal/scripts/', {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      })
+    )
+
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(`Failed to list scripts: ${error}`)
+    }
+
+    const files = await response.json() as string[]
+    return files
+      .filter((f: string) => f.endsWith('.py'))
+      .map((f: string) => f.replace(/\.py$/, ''))
+  }
+
+  // ===========================================================================
+  // NPMX Integration (Package Installation)
+  // ===========================================================================
+
+  /**
+   * Install a Python package via NPMX service
+   * NPMX provides a unified package manager interface
+   */
+  async installPackageViaNpmx(name: string, version?: string): Promise<void> {
+    if (!this.env.NPMX) {
+      throw new Error('NPMX service binding not configured')
+    }
+
+    const packageSpec = version ? `${name}@${version}` : name
+    const response = await this.env.NPMX.fetch(
+      new Request('https://npmx.internal/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          package: packageSpec,
+          type: 'python', // Specify Python package ecosystem
+        }),
+      })
+    )
+
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(`Failed to install package via NPMX: ${error}`)
+    }
+  }
+
+  /**
+   * Get package info from NPMX
+   */
+  async getPackageInfo(name: string): Promise<Record<string, unknown>> {
+    if (!this.env.NPMX) {
+      throw new Error('NPMX service binding not configured')
+    }
+
+    const response = await this.env.NPMX.fetch(
+      new Request(`https://npmx.internal/info/${name}?type=python`, {
+        method: 'GET',
+      })
+    )
+
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(`Failed to get package info: ${error}`)
+    }
+
+    return response.json()
   }
 }
 
